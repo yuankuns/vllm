@@ -15,6 +15,27 @@ from vllm.platforms import current_platform
 
 logger = init_logger(__name__)
 
+import functools, time
+profiling_time = {}
+
+def profile_layer(func):
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        # torch.xpu.synchronize()
+        start = time.time()
+        out = func(*args, **kwargs)
+        # torch.xpu.synchronize()
+        func_name = func.__name__
+        end = time.time()
+        if func_name not in profiling_time:
+            profiling_time[func_name] = (0, 0.0)
+        else:
+            counter, accum = profiling_time[func_name]
+            profiling_time[func_name] = (counter + 1, accum + (end - start) * 1000.0)
+            counter, accum = profiling_time[func_name]
+            print(f'{func_name} {counter} took {accum/counter} ms fr {start} to {end}')
+        return out
+    return wrapper
 
 @triton.jit
 def fused_moe_kernel(
